@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 
@@ -13,14 +14,40 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	r := gin.Default()
-	r.GET("/api/encrypt", func(c *gin.Context) {
-		c.JSON(200, gin.H{
-			"message": "encrypted",
+	r.POST("/api/encryption", func(c *gin.Context) {
+		file, _ := c.FormFile("file")
+		method := c.PostForm("method")
+		key := c.PostForm("key")
+		iv := c.PostForm("iv")
+		println(file)
+		// Upload the file to specific dst.
+		c.SaveUploadedFile(file, fmt.Sprintf("./uploads/%s", file.Filename))
+
+		// ! TODO encrypt file
+
+		c.JSON(http.StatusOK, gin.H{
+			"fileName": file.Filename,
+			"method":   method,
+			"key":      key,
+			"iv":       iv,
 		})
 	})
-	r.GET("/api/decrypt", func(c *gin.Context) {
-		c.JSON(200, gin.H{
-			"message": "decrypted",
+	r.POST("/api/decryption", func(c *gin.Context) {
+		file, _ := c.FormFile("file")
+		method := c.PostForm("method")
+		key := c.PostForm("key")
+		iv := c.PostForm("iv")
+
+		// Upload the file to specific dst.
+		c.SaveUploadedFile(file, fmt.Sprintf("./uploads/%s", file.Filename))
+
+		// ! TODO decrypt file
+
+		c.JSON(http.StatusOK, gin.H{
+			"fileName": file.Filename,
+			"method":   method,
+			"key":      key,
+			"iv":       iv,
 		})
 	})
 
