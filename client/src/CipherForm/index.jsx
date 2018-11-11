@@ -15,7 +15,7 @@ export default class CipherFormContainer extends React.Component {
         console.log('encrypting', this.state)
         const formData = this.generateDataForm()
         const res = await encrypt(formData)
-        console.log(res)
+        this.props.onEncrypted(res.fileName)
 
     }
     onDecrypt = async (e) => {
@@ -23,7 +23,7 @@ export default class CipherFormContainer extends React.Component {
         console.log('decrypting', this.state)
         const formData = this.generateDataForm()
         const res = await decrypt(formData)
-        console.log(res)
+        this.props.onEncrypted(res.fileName)
     }
 
     onChange = (e) => {

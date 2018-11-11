@@ -11,9 +11,7 @@ const Placeholder = () => (
 
 const ImageHero = (props) => (
     <Jumbotron>
-        {props.imageSrc ? <Image fluid src={props.imageSrc} /> : <Placeholder/>
-        
-        }
+        {props.src ? <Image fluid src={props.src} /> : <Placeholder/>}
     </Jumbotron>
 )
 

@@ -6,12 +6,20 @@ import CipherForm from './CipherForm';
 import 'bootstrap/dist/css/bootstrap.css';
 
 class App extends Component {
+  state = {
+    encryptedSrc : null
+  }
+
+  onEncrypted = fileName => {
+    this.setState({encryptedSrc: `static/${fileName}`})
+  }
+
   render() {
     return (
       <div>
-        <ImageHero />
+        <ImageHero src={this.state.encryptedSrc} />
         <Container>
-          <CipherForm/>
+          <CipherForm onEncrypted={this.onEncrypted}/>
         </Container>
       </div>
     );
