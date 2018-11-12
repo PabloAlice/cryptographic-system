@@ -3,7 +3,11 @@ package main
 import (
 	"bytes"
 	"crypto/cipher"
+	"encoding/binary"
 	"fmt"
+	"image"
+	"image/color"
+	"image/jpeg"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -14,7 +18,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func parseForm(c *gin.Context, decryption bool) (*present.Cipher, []byte, []byte, string, []byte, string, []byte) {
+func parseForm(c *gin.Context, decryption bool) (*present.Cipher, []byte, []byte, string, []byte, string, []byte, image.Image) {
 	file, _ := c.FormFile("file")
 	method := c.PostForm("method")
 	rawKey := c.PostForm("key")
@@ -38,9 +42,23 @@ func parseForm(c *gin.Context, decryption bool) (*present.Cipher, []byte, []byte
 	}
 	srcFile, _ := file.Open()
 	defer srcFile.Close()
-	srcFile.Read(src)
-
-	return block, encryptedData, src, encryptedFileName, cipherData, method, iv
+	// srcFile.Read(src)
+	img, _ := jpeg.Decode(srcFile)
+	pixelsBuffer := new(bytes.Buffer)
+	b := img.Bounds()
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			r, g, b, a := img.At(x, y).RGBA()
+			binary.Write(pixelsBuffer, binary.LittleEndian, r)
+			binary.Write(pixelsBuffer, binary.LittleEndian, g)
+			binary.Write(pixelsBuffer, binary.LittleEndian, b)
+			binary.Write(pixelsBuffer, binary.LittleEndian, a)
+		}
+	}
+	println(b.Max.X * b.Max.Y)
+	println(pixelsBuffer.Len())
+	// pixelsBuffer.Read(src)
+	return block, encryptedData, pixelsBuffer.Bytes(), encryptedFileName, cipherData, method, iv, img
 }
 
 func saveFile(data []byte, fileName string) {
@@ -93,17 +111,34 @@ func decrypt(block *present.Cipher, iv []byte, method string, dest []byte, src [
 func main() {
 	r := gin.Default()
 	r.POST("/api/encryption", func(c *gin.Context) {
-		block, encryptedData, src, encryptedFileName, cipherData, method, iv := parseForm(c, false)
+		block, encryptedData, src, encryptedFileName, _, method, iv, img := parseForm(c, false)
 		// end data parsed
 		encrypt(block, iv, method, encryptedData, src)
-		saveFile(cipherData[block.BlockSize():], encryptedFileName)
+		b := img.Bounds()
+		newImg := image.NewRGBA(b)
+		pixNumber := 0
+		println(len(encryptedData))
+		println(b.Max.X * b.Max.Y)
+		for y := b.Min.Y; y < b.Max.Y; y++ {
+			for x := b.Min.X; x < b.Max.X; x++ {
+				r := encryptedData[pixNumber]
+				g := encryptedData[pixNumber+1]
+				b := encryptedData[pixNumber+2]
+				a := encryptedData[pixNumber+3]
+				newImg.Set(x, y, color.RGBA{r, g, b, a})
+				pixNumber += 4
+			}
+		}
+		imgBuffer := new(bytes.Buffer)
+		jpeg.Encode(imgBuffer, newImg, nil)
+		saveFile(imgBuffer.Bytes(), encryptedFileName)
 		c.JSON(http.StatusOK, gin.H{
 			"fileName": encryptedFileName,
 			"method":   method,
 		})
 	})
 	r.POST("/api/decryption", func(c *gin.Context) {
-		block, encryptedData, src, encryptedFileName, cipherData, method, iv := parseForm(c, true)
+		block, encryptedData, src, encryptedFileName, cipherData, method, iv, _ := parseForm(c, true)
 		decrypt(block, iv, method, encryptedData, src)
 		saveFile(cipherData[block.BlockSize():], encryptedFileName)
 		c.JSON(http.StatusOK, gin.H{
