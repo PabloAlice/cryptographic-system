@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/PabloAlice/cryptographic-system/src"
 
@@ -14,7 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func parseForm(c *gin.Context, decryption bool) (*present.Cipher, []byte, []byte, string, []byte, string, []byte) {
+func parseForm(c *gin.Context, decryption bool) (*present.Cipher, []byte, []byte, []byte, string, []byte, string, []byte) {
 	file, _ := c.FormFile("file")
 	method := c.PostForm("method")
 	rawKey := c.PostForm("key")
@@ -24,8 +25,13 @@ func parseForm(c *gin.Context, decryption bool) (*present.Cipher, []byte, []byte
 	if err != nil {
 		panic(err)
 	}
+
+	log.Println("file= ")
+	log.Println(file)
+
 	blockSize64 := int64(block.BlockSize())
-	src := make([]byte, file.Size+blockSize64-file.Size%blockSize64)
+	//src := make([]byte, file.Size+blockSize64-file.Size%blockSize64)
+	src := make([]byte, file.Size-file.Size%blockSize64)
 	cipherData := make([]byte, len(src)+block.BlockSize())
 	cipherDataBuffer := new(bytes.Buffer)
 	cipherDataBuffer.Write(([]byte(rawIv))[:block.BlockSize()])
@@ -38,9 +44,21 @@ func parseForm(c *gin.Context, decryption bool) (*present.Cipher, []byte, []byte
 	}
 	srcFile, _ := file.Open()
 	defer srcFile.Close()
+	log.Println("srcFile= ")
+	log.Println(srcFile)
+
+	headerData := make([]byte, 54)
+	srcFile.Read(headerData)
+	log.Println("headerData= ")
+	log.Println(headerData)
+
+	srcFile.Seek(54, 0)
 	srcFile.Read(src)
 
-	return block, encryptedData, src, encryptedFileName, cipherData, method, iv
+	log.Println("src= ")
+	log.Println(src)
+
+	return block, encryptedData, headerData, src, encryptedFileName, cipherData, method, iv
 }
 
 func saveFile(data []byte, fileName string) {
@@ -93,19 +111,45 @@ func decrypt(block *present.Cipher, iv []byte, method string, dest []byte, src [
 func main() {
 	r := gin.Default()
 	r.POST("/api/encryption", func(c *gin.Context) {
-		block, encryptedData, src, encryptedFileName, cipherData, method, iv := parseForm(c, false)
+		block, encryptedData, headerData, src, encryptedFileName, cipherData, method, iv := parseForm(c, false)
 		// end data parsed
 		encrypt(block, iv, method, encryptedData, src)
-		saveFile(cipherData[block.BlockSize():], encryptedFileName)
+
+		buffer2 := make([]byte, 54+block.BlockSize())
+		buffer := new(bytes.Buffer)
+		buffer.Write(headerData)
+		log.Println("buffer1= ")
+		log.Println(buffer)
+
+		log.Println("cipherData ")
+		log.Println(cipherData)
+		//buffer = append(buffer, cipherData)
+		buffer.Write(cipherData)
+
+		log.Println("buffer2= ")
+		log.Println(buffer)
+		buffer.Read(buffer2)
+		saveFile(buffer2, encryptedFileName)
+
+		//log.Println("encripted= ")
+		//log.Println(cipherData[block.BlockSize():])
+
+		//check(err)
 		c.JSON(http.StatusOK, gin.H{
 			"fileName": encryptedFileName,
 			"method":   method,
 		})
 	})
 	r.POST("/api/decryption", func(c *gin.Context) {
-		block, encryptedData, src, encryptedFileName, cipherData, method, iv := parseForm(c, true)
+		block, encryptedData, headerData, src, encryptedFileName, cipherData, method, iv := parseForm(c, true)
 		decrypt(block, iv, method, encryptedData, src)
-		saveFile(cipherData[block.BlockSize():], encryptedFileName)
+
+		buffer := make([]byte, 54+block.BlockSize())
+		buffer = append(headerData)
+		buffer = append(cipherData)
+
+		saveFile(buffer, encryptedFileName)
+
 		c.JSON(http.StatusOK, gin.H{
 			"fileName": encryptedFileName,
 			"method":   method,
@@ -117,8 +161,16 @@ func main() {
 	r.GET("/", func(c *gin.Context) {
 		c.File("./build/index.html")
 	})
+
+	f, err := os.OpenFile("testlogfile", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatalf("error opening file: %v", err)
+	}
+	defer f.Close()
+
+	log.SetOutput(f)
 	log.Println("Listening...")
-	r.Run() // listen and serve on 0.0.0.0:8080
+	r.Run(":3000") // listen and serve on 0.0.0.0:8080
 
 }
 
